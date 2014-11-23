@@ -27,6 +27,7 @@ var template = require( 'jsdoc/template' ),
 	outdir = env.opts.destination;
 
 var globalUrl = helper.getUniqueFilename( 'global' );
+helper.registerLink( 'global', globalUrl );
 var indexUrl = helper.getUniqueFilename( 'index' );
 
 var navOptions = {
@@ -44,7 +45,8 @@ var navOptions = {
 	outputSourcePath      : conf.outputSourcePath,
 	dateFormat            : conf.dateFormat,
 	analytics             : conf.analytics || null,
-	highlightTutorialCode : conf.highlightTutorialCode
+	highlightTutorialCode : conf.highlightTutorialCode,
+	showNavControllers       : conf.showNavControllers || false
 };
 
 var navigationMaster = {
@@ -58,6 +60,21 @@ var navigationMaster = {
 		link    : helper.getUniqueFilename( "namespaces.list" ),
 		members : []
 	},
+	service : {
+		title   : "Services",
+		link    : helper.getUniqueFilename( "services.list" ),
+		members : []
+	},
+	controller : {
+		title   : "Controllers",
+		link    : helper.getUniqueFilename( "controllers.list" ),
+		members : []
+	},
+	directive : {
+		title   : "Directives",
+		link    : helper.getUniqueFilename( "directives.list" ),
+		members : []
+	},
 	module    : {
 		title   : "Modules",
 		link    : helper.getUniqueFilename( "modules.list" ),
@@ -68,7 +85,11 @@ var navigationMaster = {
 		link    : helper.getUniqueFilename( 'classes.list' ),
 		members : []
 	},
-
+	ngModule    : {
+		title   : "NGModules",
+		link    : helper.getUniqueFilename( "ngModules.list" ),
+		members : []
+	},
 	mixin    : {
 		title   : "Mixins",
 		link    : helper.getUniqueFilename( "mixins.list" ),
@@ -122,7 +143,7 @@ function needsSignature( doclet ) {
 	var needsSig = false;
 
 	// function and class definitions always get a signature
-	if ( doclet.kind === 'function' || doclet.kind === 'class' ) {
+	if ( doclet.kind === 'function' || doclet.kind === 'class' || doclet.kind === 'controller' || doclet.kind === 'service' || doclet.kind==='ngModule' ) {
 		needsSig = true;
 	}
 	// typedefs that contain functions get a signature, too
@@ -265,6 +286,14 @@ function attachModuleSymbols( doclets, modules ) {
 	} );
 }
 
+function getMembers(data) {
+	var members = helper.getMembers( data );
+	members.controllers = helper.find( data, {kind: 'controller'} );
+	members.services = helper.find( data, {kind: 'service'} );
+	members.directives = helper.find( data, {kind: 'directive'} );
+	return members;
+}
+
 /**
  * Create the navigation sidebar.
  * @param {object} members The members that will be used to create the sidebar.
@@ -290,6 +319,15 @@ function buildNav( members ) {
 				nav.module.members.push( linkto( m.longname, m.longname.replace("module:", "") ) );
 			}
 			seen[m.longname] = true;
+		} );
+	}
+
+	if (members.ngModules.length ) {
+		members.ngModules.forEach( function ( c ) {
+			if ( !hasOwnProp.call( seen, c.longname ) ) {
+				nav.ngModule.members.push( linkto( c.longname, c.longname.replace("module:", "") ) );
+			}
+			seen[c.longname] = true;
 		} );
 	}
 
@@ -364,10 +402,37 @@ function buildNav( members ) {
 	if ( members.globals.length ) {
 		members.globals.forEach( function ( g ) {
 			if ( g.kind !== 'typedef' && !hasOwnProp.call( seen, g.longname ) ) {
-
 				nav.global.members.push( linkto( g.longname, g.longname.replace("module:", "") ) );
 			}
 			seen[g.longname] = true;
+		} );
+	}
+
+	if ( navOptions.showNavControllers && members.controllers.length ) {
+		members.controllers.forEach( function ( c ) {
+			if ( !hasOwnProp.call( seen, c.longname ) ) {
+				nav.controller.members.push( linkto( c.longname, c.longname.replace("module:", "") ) );
+			}
+			seen[c.longname] = true;
+		} );
+	}
+
+
+	if ( members.directives.length ) {
+		members.directives.forEach( function ( c ) {
+			if ( !hasOwnProp.call( seen, c.longname ) ) {
+				nav.directive.members.push( linkto( c.longname, c.longname.replace("module:", "") ) );
+			}
+			seen[c.longname] = true;
+		} );
+	}
+
+	if (members.services.length ) {
+		members.services.forEach( function ( c ) {
+			if ( !hasOwnProp.call( seen, c.longname ) ) {
+				nav.service.members.push( linkto( c.longname, c.longname.replace("module:", "") ) );
+			}
+			seen[c.longname] = true;
 		} );
 	}
 
@@ -400,10 +465,11 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 	// claim some special filenames in advance, so the All-Powerful Overseer of Filename Uniqueness
 	// doesn't try to hand them out later
 //	var indexUrl = helper.getUniqueFilename( 'index' );
+
 	// don't call registerLink() on this one! 'index' is also a valid longname
 
 //	var globalUrl = helper.getUniqueFilename( 'global' );
-	helper.registerLink( 'global', globalUrl );
+//	helper.registerLink( 'global', globalUrl );
 
 	// set up templating
 	view.layout = 'layout.tmpl';
@@ -454,6 +520,7 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 
 		// build a list of source files
 		var sourcePath;
+
 		if ( doclet.meta ) {
 			sourcePath = getPathFromDoclet( doclet );
 			sourceFiles[sourcePath] = {
@@ -540,7 +607,9 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 		}
 	} );
 
-	var members = helper.getMembers( data );
+	var members = getMembers( data );
+
+
 	members.tutorials = tutorials.children;
 
 	// add template helpers
@@ -555,8 +624,9 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 	buildNav( members );
 	view.nav = navigationMaster;
 	view.navOptions = navOptions;
-	attachModuleSymbols( find( { kind : ['class', 'function'], longname : {left : 'module:'} } ),
+	attachModuleSymbols( find( { kind : ['controller', 'ngModule', 'class', 'function'], longname : {left : 'module:'} } ),
 		members.modules );
+
 
 	// only output pretty-printed source files if requested; do this before generating any other
 	// pages, so the other pages can link to the source files
@@ -566,7 +636,7 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 
 	if ( members.globals.length ) {
 		generate( 'global', 'Global', [
-			{kind : 'globalobj'}
+			{kind : 'globalobj', contents : view.nav.global}
 		], globalUrl );
 	}
 
@@ -575,6 +645,31 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 		generate( 'module', view.nav.module.title, [
 			{kind : 'sectionIndex', contents : view.nav.module}
 		], navigationMaster.module.link );
+	}
+
+	// some browsers can't make the dropdown work
+	if ( view.nav.ngModule && view.nav.ngModule.members.length ) {
+		generate( 'ngModule', view.nav.ngModule.title, [
+			{kind : 'sectionIndex', contents : view.nav.ngModule}
+		], navigationMaster.ngModule.link );
+	}
+
+	if ( view.nav.directive && view.nav.directive.members.length ) {
+		generate( 'directive', view.nav.directive.title, [
+			{kind : 'sectionIndex', contents : view.nav.directive}
+		], navigationMaster.directive.link );
+	}
+
+	if ( view.nav.controller && view.nav.controller.members.length ) {
+		generate( 'controller', view.nav.controller.title, [
+			{kind : 'sectionIndex', contents : view.nav.controller}
+		], navigationMaster.controller.link );
+	}
+
+	if ( view.nav.service && view.nav.service.members.length ) {
+		generate( 'service', view.nav.service.title, [
+			{kind : 'sectionIndex', contents : view.nav.service}
+		], navigationMaster.service.link );
 	}
 
 	if ( view.nav.class && view.nav.class.members.length ) {
@@ -622,11 +717,16 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 	// set up the lists that we'll use to generate pages
 	var classes = taffy( members.classes );
 	var modules = taffy( members.modules );
+	var ngModules = taffy( members.ngModules );
+	var controllers = taffy( members.controllers );
+	var services = taffy( members.services );
+	var directives = taffy( members.directives );
 	var namespaces = taffy( members.namespaces );
 	var mixins = taffy( members.mixins );
 	var externals = taffy( members.externals );
 
-	for ( var longname in helper.longnameToUrl ) {
+	Object.keys(helper.longnameToUrl).forEach(function(longname) {
+
 		if ( hasOwnProp.call( helper.longnameToUrl, longname ) ) {
 			var myClasses = helper.find( classes, {longname : longname} );
 			if ( myClasses.length ) {
@@ -636,6 +736,27 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 			var myModules = helper.find( modules, {longname : longname} );
 			if ( myModules.length ) {
 				generate( 'module', 'Module: ' + myModules[0].name, myModules, helper.longnameToUrl[longname] );
+			}
+
+			var myNGModules = helper.find(ngModules, {longname: longname});
+			if ( myNGModules.length ) {
+				generate( 'ngModule', 'NGModule: ' + myNGModules[0].name, myNGModules, helper.longnameToUrl[longname] );
+			}
+
+			var myDirectives = helper.find(directives, {longname: longname});
+			if ( myDirectives.length ) {
+				generate( 'directive', 'Directive: ' + myDirectives[0].name, myDirectives, helper.longnameToUrl[longname] );
+			}
+
+			var myControllers = helper.find(controllers, {longname: longname});
+
+			if ( myControllers.length ) {
+				generate( 'controller', 'Controller: ' + myControllers[0].name, myControllers, helper.longnameToUrl[longname] );
+			}
+
+			var myServices = helper.find(services, {longname: longname});
+			if ( myServices.length ) {
+				generate( 'service', 'Service: ' + myServices[0].name, myServices, helper.longnameToUrl[longname] );
 			}
 
 			var myNamespaces = helper.find( namespaces, {longname : longname} );
@@ -653,7 +774,7 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 				generate( 'external', 'External: ' + myExternals[0].name, myExternals, helper.longnameToUrl[longname] );
 			}
 		}
-	}
+	});
 
 	// TODO: move the tutorial functions to templateHelper.js
 	function generateTutorial( title, tutorial, filename ) {
@@ -683,4 +804,6 @@ exports.publish = function ( taffyData, opts, tutorials ) {
 	}
 
 	saveChildren( tutorials );
+
+	console.log('success!');
 };
